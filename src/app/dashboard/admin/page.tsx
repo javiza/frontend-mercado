@@ -8,7 +8,7 @@ import { clp, fechaCorta } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { EstadoBadge } from "@/components/tienda/estado-badge";
 import { useSessionStore } from "@/store/session-store";
-import type { Producto, Venta } from "@/lib/supermercado-types";
+import type { Producto, ResumenAnalytics, Venta, VentaDiaria } from "@/lib/supermercado-types";
 
 const mismoDia = (a: Date, b: Date) => a.toDateString() === b.toDateString();
 
@@ -18,22 +18,37 @@ export default function ResumenPage() {
   const veVentas = rol === "SUPER_ADMIN" || rol === "ADMIN" || rol === "CAJERO";
   const veStock = rol === "SUPER_ADMIN" || rol === "ADMIN" || rol === "BODEGA";
 
-  const { data: ventas } = useQuery({ queryKey: ["resumen-ventas"], queryFn: () => apiFetch<Venta[]>("/ventas"), enabled: veVentas });
+  const gestion = rol === "SUPER_ADMIN" || rol === "ADMIN";
+
+  // Admins: cifras precalculadas en la base (vistas materializadas) → no dependen de cuántas ventas existan.
+  const { data: resumen } = useQuery({ queryKey: ["resumen-analytics"], queryFn: () => apiFetch<ResumenAnalytics>("/analytics/resumen"), enabled: gestion, refetchInterval: 60_000 });
+  const { data: diarias } = useQuery({ queryKey: ["resumen-diarias"], queryFn: () => apiFetch<VentaDiaria[]>("/analytics/ventas-diarias?dias=6"), enabled: gestion, refetchInterval: 60_000 });
+  // Pedidos por cobrar: el filtro lo hace el servidor (antes se descargaban todas las ventas para contarlos).
+  const { data: porCobrar } = useQuery({ queryKey: ["resumen-por-cobrar"], queryFn: () => apiFetch<Venta[]>("/ventas?canal=ONLINE&estado=PENDIENTE_PAGO&limit=500"), enabled: veVentas, refetchInterval: 60_000 });
+  // Últimas ventas (y cifras del cajero, que no tiene acceso a reportes): solo las más recientes.
+  const { data: ventas } = useQuery({ queryKey: ["resumen-ventas"], queryFn: () => apiFetch<Venta[]>("/ventas?limit=200"), enabled: veVentas });
   const { data: bajos } = useQuery({ queryKey: ["resumen-stock-bajo"], queryFn: () => apiFetch<Producto[]>("/productos/stock-bajo"), enabled: veStock });
 
   const validas = (ventas ?? []).filter((v) => v.estado !== "ANULADA");
   const hoy = new Date();
   const deHoy = validas.filter((v) => mismoDia(new Date(v.creadoEn), hoy));
-  const pendientes = (ventas ?? []).filter((v) => v.estado === "PENDIENTE_PAGO" && v.canal === "ONLINE");
+  const pendientes = porCobrar ?? [];
 
+  const totalPorFecha = new Map<string, number>();
+  for (const r of diarias ?? []) totalPorFecha.set(r.fecha, (totalPorFecha.get(r.fecha) ?? 0) + r.total);
   const dias = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i));
-    return { d, total: validas.filter((v) => mismoDia(new Date(v.creadoEn), d)).reduce((a, v) => a + Number(v.total), 0) };
+    const total = gestion && diarias
+      ? totalPorFecha.get(d.toLocaleDateString("en-CA", { timeZone: "America/Santiago" })) ?? 0
+      : validas.filter((v) => mismoDia(new Date(v.creadoEn), d)).reduce((a, v) => a + Number(v.total), 0);
+    return { d, total };
   });
   const max = Math.max(...dias.map((x) => x.total), 1);
 
   const kpis = [
-    veVentas && { l: "Ventas de hoy", v: clp(deHoy.reduce((a, v) => a + Number(v.total), 0)), s: `${deHoy.length} ${deHoy.length === 1 ? "venta" : "ventas"}`, i: TrendingUp, t: "bg-clay-50 text-clay-600" },
+    veVentas && (gestion && resumen
+      ? { l: "Ventas de hoy", v: clp(resumen.hoy.total), s: `${resumen.hoy.ventas} ${resumen.hoy.ventas === 1 ? "venta cobrada" : "ventas cobradas"}`, i: TrendingUp, t: "bg-clay-50 text-clay-600" }
+      : { l: "Ventas de hoy", v: clp(deHoy.reduce((a, v) => a + Number(v.total), 0)), s: `${deHoy.length} ${deHoy.length === 1 ? "venta" : "ventas"}`, i: TrendingUp, t: "bg-clay-50 text-clay-600" }),
     veVentas && { l: "Pedidos online por cobrar", v: String(pendientes.length), s: "pendientes de pago", i: ClipboardList, t: "bg-amber-50 text-amber-600" },
     veStock && { l: "Stock bajo", v: String(bajos?.length ?? 0), s: "productos por reponer", i: AlertTriangle, t: "bg-red-50 text-red-500" },
   ].filter(Boolean) as { l: string; v: string; s: string; i: typeof TrendingUp; t: string }[];

@@ -143,3 +143,16 @@ export type Turno = {
   horaFin: string;
   notas?: string;
 };
+
+// ===== reportes (vistas materializadas del backend: /analytics/*) =====
+export type ResumenAnalytics = {
+  hoy: { ventas: number; total: number };
+  mes: { ventas: number; total: number };
+  stockBajo: number;
+  valorInventario: number;
+  actualizadoEn: string | null;
+};
+export type VentaDiaria = { fecha: string; canal: "ONLINE" | "MOSTRADOR"; ventas: number; total: number; ticketPromedio: number };
+export type TopProducto = { productoId: number; nombre: string; unidades: number; ingresos: number; margenEstimado: number; ventas: number };
+export type VentaCategoriaMes = { mes: string; categoriaId: number; categoria: string; unidades: number; ingresos: number };
+export type StockCategoria = { categoriaId: number; categoria: string; productos: number; unidades: number; valorCosto: number; valorVenta: number; productosStockBajo: number };

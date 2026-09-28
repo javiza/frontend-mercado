@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Boxes, Warehouse, ShoppingCart, Banknote, UserCog, Users, Contact, Menu, X, ShoppingBasket,
+  LayoutDashboard, Boxes, Warehouse, ShoppingCart, Banknote, UserCog, Users, Contact, Menu, X, ShoppingBasket, BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import { useSessionStore } from "@/store/session-store";
@@ -15,7 +15,13 @@ const TODOS: Rol[] = ["SUPER_ADMIN", "ADMIN", "CAJERO", "BODEGA"];
 const GESTION: Rol[] = ["SUPER_ADMIN", "ADMIN"];
 
 const GRUPOS: { titulo: string; items: Item[] }[] = [
-  { titulo: "General", items: [{ href: "/dashboard/admin", label: "Resumen", icon: LayoutDashboard, roles: TODOS }] },
+  {
+    titulo: "General",
+    items: [
+      { href: "/dashboard/admin", label: "Resumen", icon: LayoutDashboard, roles: TODOS },
+      { href: "/dashboard/admin/reportes", label: "Reportes", icon: BarChart3, roles: GESTION },
+    ],
+  },
   {
     titulo: "Operación",
     items: [
